@@ -21,11 +21,13 @@ A simple 3-tier microservices demo running on `k3d`.
 2. **Access**:
    [http://localhost:8080](http://localhost:8080)
 
+## KEDA - Overview
+
 [KEDA](https://keda.sh/) (Kubernetes Event-driven Autoscaling) is a single-purpose and lightweight component that can be added into any Kubernetes cluster and extends native Kubernetes scaling to support event-driven applications.
 
 ## KEDA HTTP Scaling (Elastic Stack)
 
-This project implements **Traffic-Based Elastic Scaling** using the KEDA HTTP Add-on. This allows the Frontend to scale-to-zero when idle and rapidly scale-out based on concurrent request volume.
+This PoC project implements **Traffic-Based Elastic Scaling** using the KEDA HTTP Add-on. This allows the Frontend to scale-to-zero when idle and rapidly scale-out based on concurrent request volume.
 
 ### Scaling Architecture
 ```mermaid
