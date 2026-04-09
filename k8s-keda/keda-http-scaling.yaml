@@ -1,0 +1,19 @@
+kind: HTTPScaledObject
+apiVersion: http.keda.sh/v1alpha1
+metadata:
+  name: frontend-scaling
+spec:
+  hosts:
+  - keda.test
+  scalingMetric:
+    concurrency:
+      targetValue: 2
+  targetPendingRequests: 2
+  timeouts:
+    responseHeader: 15s
+  scaleTargetRef:
+    name: frontend
+    kind: Deployment
+    apiVersion: apps/v1
+    service: frontend
+    port: 80

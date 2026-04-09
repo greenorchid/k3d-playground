@@ -2,7 +2,7 @@
 set -e
 
 CLUSTER_NAME="playground-multiserver"
-CLUSTER_SERVERS=3
+CLUSTER_SERVERS=1
 CLUSTER_PORT=8080
 
 echo "Building Docker images..."

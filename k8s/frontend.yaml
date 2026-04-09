@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: frontend
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: frontend
@@ -19,15 +19,22 @@ spec:
       containers:
       - name: node-api
         image: frontend:latest
-        imagePullPolicy: Never
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
+        env:
+        - name: MIDDLEWARE_URL
+          value: "http://middleware:8000/api/data"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
             drop:
             - ALL
-          readOnlyRootFilesystem: false # Express might need to write temp files or npm cached files if not handled, but we'll try false first.
+          readOnlyRootFilesystem: false
 ---
 apiVersion: v1
 kind: Service

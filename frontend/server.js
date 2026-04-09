@@ -35,6 +35,13 @@ app.get('/', async (req, res) => {
     });
 });
 
+app.get('/api/wait', (req, res) => {
+    const ms = parseInt(req.query.ms) || 1000;
+    setTimeout(() => {
+        res.json({ message: `Waited ${ms}ms`, pod: process.env.HOSTNAME });
+    }, ms);
+});
+
 app.listen(port, () => {
     console.log(`Frontend listening at http://localhost:${port}`);
 });
