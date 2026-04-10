@@ -1,7 +1,14 @@
+# HTTPScaledObject - Frontend entry point for keda.test traffic.
+# The interceptor routes external traffic to the frontend service.
+# skip-scaledobject-creation=true means KEDA will NOT create a ScaledObject
+# automatically; we manage our own ScaledObjects below for symmetrical scaling.
 kind: HTTPScaledObject
 apiVersion: http.keda.sh/v1alpha1
 metadata:
   name: frontend-scaling
+  annotations:
+    # this is needed to prevent KEDA from creating its own ScaledObject-we'll use our owne
+    httpscaledobject.keda.sh/skip-scaledobject-creation: "true"
 spec:
   hosts:
   - keda.test
@@ -17,3 +24,39 @@ spec:
     apiVersion: apps/v1
     service: frontend
     port: 80
+---
+# Custom ScaledObject for the Frontend workload.
+# Uses the external-push trigger from the frontend-scaling HTTPScaledObject.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: frontend-scaledobject
+spec:
+  scaleTargetRef:
+    name: frontend
+  minReplicaCount: 0
+  maxReplicaCount: 100
+  triggers:
+  - type: external-push
+    metadata:
+      httpScaledObject: frontend-scaling
+      scalerAddress: keda-add-ons-http-external-scaler.keda:9090
+---
+# Custom ScaledObject for the Middleware workload.
+# Uses the SAME external-push trigger from frontend-scaling, causing middleware
+# to activate and scale symmetrically with the frontend whenever keda.test
+# receives traffic through the interceptor – no separate host required.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: middleware-scaledobject
+spec:
+  scaleTargetRef:
+    name: middleware
+  minReplicaCount: 0
+  maxReplicaCount: 100
+  triggers:
+  - type: external-push
+    metadata:
+      httpScaledObject: frontend-scaling
+      scalerAddress: keda-add-ons-http-external-scaler.keda:9090

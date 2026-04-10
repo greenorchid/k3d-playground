@@ -13,6 +13,10 @@ helm upgrade --install http-add-on kedacore/keda-add-ons-http --namespace keda
 
 echo "Applying k8s-keda manifests (including RBAC fix)..."
 kubectl delete clusterrolebinding keda-http-scaler-discovery-fix --ignore-not-found
+# Remove the auto-generated ScaledObject if it still exists (created by the old HTTPScaledObject
+# without skip-scaledobject-creation). The admission webhook will reject our custom
+# frontend-scaledobject if the Deployment is already managed by the old one.
+kubectl delete scaledobject frontend-scaling --ignore-not-found
 kubectl apply -f ./k8s-keda --validate=false
 
 echo "Restarting scaler to pick up permissions..."
@@ -49,10 +53,12 @@ echo "Waiting for Traefik to sync (10s)..."
 sleep 10
 
 # 1. Reset replicas to 0
-echo "Resetting frontend replicas to 0..."
+echo "Resetting frontend and middleware replicas to 0..."
 kubectl scale deployment frontend --replicas=0 --current-replicas=-1 || true
+kubectl scale deployment middleware --replicas=0 --current-replicas=-1 || true
 echo "Waiting for pods to terminate..."
 kubectl wait --for=delete pod -l app=frontend --timeout=60s || true
+kubectl wait --for=delete pod -l app=middleware --timeout=60s || true
 
 # 2. Trigger Activation (0 -> 1)
 echo "Triggering activation via Ingress (expecting cold start)..."
@@ -70,12 +76,17 @@ sleep 2
 
 # 3. Validate Activation
 echo "Verifying activation..."
-REPLICAS=$(kubectl get deployment frontend -o jsonpath='{.status.replicas}' || echo "0")
-REPLICAS=${REPLICAS:-0} # Default to 0 if empty
-if [ "$REPLICAS" -ge 1 ]; then
-    echo "SUCCESS: Frontend activated! (Replicas: $REPLICAS)"
+FE_REPLICAS=$(kubectl get deployment frontend -o jsonpath='{.status.replicas}' || echo "0")
+MW_REPLICAS=$(kubectl get deployment middleware -o jsonpath='{.status.replicas}' || echo "0")
+FE_REPLICAS=${FE_REPLICAS:-0}
+MW_REPLICAS=${MW_REPLICAS:-0}
+
+if [ "$FE_REPLICAS" -ge 1 ] && [ "$MW_REPLICAS" -ge 1 ]; then
+    echo "SUCCESS: Both services activated! (Frontend: $FE_REPLICAS, Middleware: $MW_REPLICAS)"
 else
-    echo "FAILURE: Frontend failed to activate. (Current Replicas: $REPLICAS)"
+    echo "FAILURE: Symmetrical activation failed."
+    echo "Frontend Replicas: $FE_REPLICAS"
+    echo "Middleware Replicas: $MW_REPLICAS"
     exit 1
 fi
 
@@ -91,15 +102,16 @@ echo "Waiting for KEDA to detect load and scale out (60s)..."
 sleep 60
 
 # 5. Validate Scale Out
-REPLICAS=$(kubectl get deployment frontend -o jsonpath='{.status.replicas}' || echo "0")
-echo "Current Replicas: $REPLICAS"
-if [ "$REPLICAS" -gt 1 ]; then
-    echo "SUCCESS: Frontend scaled out to $REPLICAS replicas!"
+FE_REPLICAS=$(kubectl get deployment frontend -o jsonpath='{.status.replicas}' || echo "0")
+MW_REPLICAS=$(kubectl get deployment middleware -o jsonpath='{.status.replicas}' || echo "0")
+echo "Current Replicas - Frontend: $FE_REPLICAS, Middleware: $MW_REPLICAS"
+
+if [ "$FE_REPLICAS" -gt 1 ] && [ "$MW_REPLICAS" -gt 1 ]; then
+    echo "SUCCESS: Symmetrical scale out confirmed!"
 else
-    echo "FAILURE: Frontend did not scale out."
-    kubectl get hpa keda-hpa-frontend-scaling -o wide
-    kubectl describe hpa keda-hpa-frontend-scaling
-    kubectl logs -n keda -l app.kubernetes.io/component=scaler --tail=100
+    echo "FAILURE: Symmetrical scale out failed."
+    kubectl get hpa keda-hpa-frontend-scaledobject -o wide || true
+    kubectl get hpa keda-hpa-middleware-scaledobject -o wide || true
     exit 1
 fi
 
